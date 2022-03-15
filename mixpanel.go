@@ -150,7 +150,7 @@ func (m *mixpanel) UpdateUser(distinctId string, u *Update) error {
 
 	params[u.Operation] = u.Properties
 
-	return m.sendPost("engage", params)
+	return m.sendPost("engage#profile-set", params)
 }
 
 // UnionGroup: Unions a group property in mixpanel. See
@@ -177,7 +177,7 @@ func (m *mixpanel) UpdateGroup(groupKey, groupId string, u *Update) error {
 
 	params[u.Operation] = u.Properties
 
-	return m.sendPost("groups", params)
+	return m.sendPost("groups#group-set", params)
 }
 
 // UnionGroup: Unions a group property in mixpanel. See
