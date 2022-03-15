@@ -1,7 +1,7 @@
 package mixpanel
 
 import (
-	"encoding/base64"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -39,14 +39,16 @@ type Mixpanel interface {
 	Track(distinctId, eventName string, e *Event) error
 
 	// Set properties for a mixpanel user.
-	// Deprecated: Use UpdateUser instead
-	Update(distinctId string, u *Update) error
-
-	// Set properties for a mixpanel user.
 	UpdateUser(distinctId string, u *Update) error
+
+	// Set properties for a union on user
+	UnionUser(userID string, u *Update) error
 
 	// Set properties for a mixpanel group.
 	UpdateGroup(groupKey, groupId string, u *Update) error
+
+	// Set properties for a union on group
+	UnionGroup(groupKey, groupId string, u *Update) error
 
 	Alias(distinctId, newId string) error
 }
@@ -101,7 +103,7 @@ func (m *mixpanel) Alias(distinctId, newId string) error {
 		"properties": props,
 	}
 
-	return m.send("track", params, false)
+	return m.sendPost("track", params)
 }
 
 // Track create a events to current distinct id
@@ -126,14 +128,7 @@ func (m *mixpanel) Track(distinctId, eventName string, e *Event) error {
 		"properties": props,
 	}
 
-	autoGeolocate := e.IP == ""
-
-	return m.send("track", params, autoGeolocate)
-}
-
-// Deprecated: Use UpdateUser instead
-func (m *mixpanel) Update(distinctId string, u *Update) error {
-	return m.UpdateUser(distinctId, u)
+	return m.sendPost("track", params)
 }
 
 // UpdateUser: Updates a user in mixpanel. See
@@ -155,9 +150,20 @@ func (m *mixpanel) UpdateUser(distinctId string, u *Update) error {
 
 	params[u.Operation] = u.Properties
 
-	autoGeolocate := u.IP == ""
+	return m.sendPost("engage", params)
+}
 
-	return m.send("engage", params, autoGeolocate)
+// UnionGroup: Unions a group property in mixpanel. See
+// https://api.mixpanel.com/engage#profile-union
+func (m *mixpanel) UnionUser(userID string, u *Update) error {
+	params := map[string]interface{}{
+		"$token":       m.Token,
+		"$distinct_id": userID,
+	}
+
+	params[u.Operation] = u.Properties
+
+	return m.sendPost("engage#profile-union", params)
 }
 
 // UpdateUser: Updates a group in mixpanel. See
@@ -171,46 +177,54 @@ func (m *mixpanel) UpdateGroup(groupKey, groupId string, u *Update) error {
 
 	params[u.Operation] = u.Properties
 
-	return m.send("groups", params, false)
+	return m.sendPost("groups", params)
 }
 
-func (m *mixpanel) to64(data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
+// UnionGroup: Unions a group property in mixpanel. See
+// https://api.mixpanel.com/groups#group-union
+func (m *mixpanel) UnionGroup(groupKey, groupId string, u *Update) error {
+	params := map[string]interface{}{
+		"$token":     m.Token,
+		"$group_id":  groupId,
+		"$group_key": groupKey,
+	}
+
+	params[u.Operation] = u.Properties
+
+	return m.sendPost("groups#group-union", params)
 }
 
-func (m *mixpanel) send(eventType string, params interface{}, autoGeolocate bool) error {
-	data, err := json.Marshal(params)
-
-	if err != nil {
-		return err
-	}
-
-	url := m.ApiURL + "/" + eventType + "?data=" + m.to64(data)
-
-	if autoGeolocate {
-		url += "&ip=1"
-	}
+func (m *mixpanel) sendPost(eventType string, params interface{}) error {
+	// params needs to be an array
+	params = []interface{}{params}
+	url := m.ApiURL + "/" + eventType
 
 	wrapErr := func(err error) error {
 		return &MixpanelError{URL: url, Err: err}
 	}
 
-	resp, err := m.Client.Get(url)
-
+	postBody, err := json.Marshal(params)
 	if err != nil {
-		return wrapErr(err)
+		wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: nil})
 	}
 
+	responseBody := bytes.NewBuffer(postBody)
+
+	//Leverage Go's HTTP Post function to make request
+	resp, err := http.Post(url, "application/json", responseBody)
+	//Handle Error
+	if err != nil {
+		wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: resp})
+	}
 	defer resp.Body.Close()
-
-	body, bodyErr := ioutil.ReadAll(resp.Body)
-
-	if bodyErr != nil {
-		return wrapErr(bodyErr)
+	//Read the response body
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: resp})
 	}
-
-	if strBody := string(body); strBody != "1" && strBody != "1\n" {
-		return wrapErr(&ErrTrackFailed{Body: strBody, Resp: resp})
+	sb := string(body)
+	if sb != "1" {
+		return wrapErr(&ErrTrackFailed{Body: "response not 1", Resp: resp})
 	}
 
 	return nil
