@@ -44,11 +44,17 @@ type Mixpanel interface {
 	// Set properties for a union on user
 	UnionUser(userID string, u *Update) error
 
+	// Removes a key from a list for a user
+	ListRemoveUser(userID, listKey string, listValue interface{}) error
+
 	// Set properties for a mixpanel group.
 	UpdateGroup(groupKey, groupId string, u *Update) error
 
 	// Set properties for a union on group
 	UnionGroup(groupKey, groupId string, u *Update) error
+
+	// Removes a key from a list in a group
+	ListRemoveGroup(groupKey string, groupID string, listKey string, listValue interface{}) error
 
 	Alias(distinctId, newId string) error
 }
@@ -178,6 +184,31 @@ func (m *mixpanel) UpdateGroup(groupKey, groupId string, u *Update) error {
 	params[u.Operation] = u.Properties
 
 	return m.sendPost("groups#group-set", params)
+}
+
+func (m *mixpanel) ListRemoveUser(userID, listKey string, listValue interface{}) error {
+	params := map[string]interface{}{
+		"$token":       m.Token,
+		"$distinct_id": userID,
+		"$remove": map[string]interface{}{
+			listKey: listValue,
+		},
+	}
+
+	return m.sendPost("engage#profile-list-remove", params)
+}
+
+func (m *mixpanel) ListRemoveGroup(groupKey string, groupID string, listKey string, listValue interface{}) error {
+	params := map[string]interface{}{
+		"$token":     m.Token,
+		"$group_key": groupKey,
+		"$group_id":  groupID,
+		"$remove": map[string]interface{}{
+			listKey: listValue,
+		},
+	}
+
+	return m.sendPost("groups#group-remove-from-list", params)
 }
 
 // UnionGroup: Unions a group property in mixpanel. See

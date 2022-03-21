@@ -122,6 +122,14 @@ func (m *Mock) UnionGroup(groupKey, groupUser string, u *Update) error {
 	return nil
 }
 
+func (m *Mock) ListRemoveUser(userID, listKey string, listValue interface{}) error {
+	return nil
+}
+
+func (m *Mock) ListRemoveGroup(groupKey string, groupID string, listKey string, listValue interface{}) error {
+	return nil
+}
+
 func (m *Mock) Alias(distinctId, newId string) error {
 	return nil
 }
