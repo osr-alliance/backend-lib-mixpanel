@@ -245,16 +245,18 @@ func (m *mixpanel) sendPost(eventType string, params interface{}) error {
 	resp, err := http.Post(url, "application/json", responseBody)
 	//Handle Error
 	if err != nil {
-		wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: resp})
+		return wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: resp})
 	}
-	defer resp.Body.Close()
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	//Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: resp})
+		return wrapErr(&ErrTrackFailed{Body: err.Error(), Resp: resp})
 	}
 	sb := string(body)
-	if sb != "1" {
+	if sb != "1" && sb != "1\n" {
 		return wrapErr(&ErrTrackFailed{Body: "response not 1", Resp: resp})
 	}
 
